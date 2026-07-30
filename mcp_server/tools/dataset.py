@@ -5,6 +5,7 @@ from app.datasets.loader import DatasetLoader
 from app.datasets.parser import DatasetParser
 from app.datasets.repair import StructuralRepairEngine
 from app.datasets.store import DatasetStore
+from app.datasets.remote import RemoteDatasetImporter
 
 
 def register_dataset_tools(mcp) -> None:
@@ -12,6 +13,7 @@ def register_dataset_tools(mcp) -> None:
     parser = DatasetParser()
     repair_engine = StructuralRepairEngine()
     store = DatasetStore()
+    remote_importer = RemoteDatasetImporter()
 
 
     @mcp.tool
@@ -28,6 +30,31 @@ def register_dataset_tools(mcp) -> None:
 
         return store.save_path(
             source_path=Path(file_path),
+        )
+
+    @mcp.tool
+    def import_dataset_from_url(
+        url: str,
+        filename: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        Import a CSV or XLSX dataset from a public HTTP
+        or HTTPS URL.
+
+        Use this tool when the MCP server is running
+        remotely and the dataset is not available on
+        the server's local filesystem.
+
+        The URL must point directly to a downloadable
+        CSV or XLSX file.
+
+        Returns a dataset_id for use by the analysis,
+        cleaning, and dashboard tools.
+        """
+
+        return remote_importer.import_url(
+            url=url,
+            filename=filename,
         )
 
     @mcp.tool
