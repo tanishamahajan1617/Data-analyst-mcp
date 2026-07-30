@@ -1,0 +1,5 @@
+relationship a6cc26fd-5f24-4a78-9ce9-494d3c7e7d10
+	joinOnDateBehavior: datePartOnly
+	fromColumn: doc.' Join_Date '
+	toColumn: LocalDateTable_c0cc481c-3612-4823-b5c5-b1919ff7fb4e.Date
+

@@ -1,0 +1,11 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "Report",
+    "displayName": "DataAnalystTemplate"
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "ecd702bc-5809-402a-8e2d-2d0d84782192"
+  }
+}

@@ -1,0 +1,64 @@
+# -------------------------
+# Python
+# -------------------------
+__pycache__/
+*.py[cod]
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# -------------------------
+# Secrets / environment
+# -------------------------
+.env
+.env.*
+!.env.example
+
+# -------------------------
+# Runtime dataset storage
+# -------------------------
+data/raw/
+data/cleaned/
+data/exports/
+data/repaired/
+data/metadata/
+data/temp/
+data/tmp/
+
+# -------------------------
+# Python tooling
+# -------------------------
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# -------------------------
+# Power BI local/cache files
+# Keep actual template definitions
+# -------------------------
+**/.pbi/
+*.pbix
+
+# -------------------------
+# IDE
+# -------------------------
+.vscode/
+.idea/
+
+# -------------------------
+# OS
+# -------------------------
+.DS_Store
+Thumbs.db
+
+# -------------------------
+# Logs
+# -------------------------
+*.log
+
+tests/

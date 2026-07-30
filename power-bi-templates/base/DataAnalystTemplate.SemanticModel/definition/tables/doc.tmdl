@@ -1,0 +1,83 @@
+table doc
+	lineageTag: 744823b0-995a-45ba-991b-b0371a0ae972
+
+	column User_ID
+		dataType: int64
+		formatString: 0
+		lineageTag: 9342e6d9-474c-4869-a04c-b8a3660915ae
+		summarizeBy: count
+		sourceColumn: User_ID
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Full Name'
+		dataType: string
+		lineageTag: 46757840-a835-4133-b3e8-5de28beff42c
+		summarizeBy: none
+		sourceColumn: Full Name
+
+		annotation SummarizationSetBy = Automatic
+
+	column Age
+		dataType: string
+		lineageTag: 0fcb5c58-58ef-4968-ada1-05bb25e566e7
+		summarizeBy: none
+		sourceColumn: Age
+
+		annotation SummarizationSetBy = Automatic
+
+	column ' Join_Date '
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: 97dadefd-ebb8-4a37-bf46-e4c5d2403a42
+		summarizeBy: none
+		sourceColumn: " Join_Date "
+
+		variation Variation
+			isDefault
+			relationship: a6cc26fd-5f24-4a78-9ce9-494d3c7e7d10
+			defaultHierarchy: LocalDateTable_c0cc481c-3612-4823-b5c5-b1919ff7fb4e.'Date Hierarchy'
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column Email
+		dataType: string
+		lineageTag: 3e78c051-242e-4b28-86ac-39beb055fc21
+		summarizeBy: none
+		sourceColumn: Email
+
+		annotation SummarizationSetBy = Automatic
+
+	column Salary
+		dataType: double
+		lineageTag: 2db742d3-089a-4f6e-a649-b9013e4bf179
+		summarizeBy: sum
+		sourceColumn: Salary
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column Column1
+		dataType: int64
+		formatString: 0
+		lineageTag: 3b2e0f6a-c39e-4e09-978e-9a43b3ae3298
+		summarizeBy: sum
+		sourceColumn: Column1
+
+		annotation SummarizationSetBy = Automatic
+
+	partition doc = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents("C:\Users\LENOVO\OneDrive\Desktop\doc.csv"),[Delimiter=",", Columns=7, Encoding=1252, QuoteStyle=QuoteStyle.None]),
+				    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+				    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"User_ID", Int64.Type}, {"Full Name", type text}, {"Age", type text}, {" Join_Date ", type date}, {"Email", type text}, {"Salary", type number}, {"", Int64.Type}})
+				in
+				    #"Changed Type"
+
+	annotation PBI_ResultType = Table
+
