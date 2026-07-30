@@ -145,3 +145,27 @@ def register_dataset_tools(mcp) -> None:
             row_number=row_number,
             merge_into_column=merge_into_column,
         )
+    @mcp.tool
+    def upload_dataset_content(
+    filename: str,
+    content: str,
+  ) -> dict[str, Any]:
+            """
+            Upload a CSV dataset directly from its text content.
+
+            Use this tool when the client has access to an
+            uploaded CSV attachment but the remote MCP server
+            cannot access the client's local filesystem.
+
+            The client should read the CSV attachment and pass
+            its complete text content together with the original
+            filename.
+
+            Returns a dataset_id that can be used by analysis,
+            cleaning, and dashboard tools.
+            """
+
+            return store.save_content(
+                filename=filename,
+                content=content,
+            )

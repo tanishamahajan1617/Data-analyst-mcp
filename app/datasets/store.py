@@ -141,3 +141,111 @@ class DatasetStore:
                 )
 
             raise
+
+    def save_content(
+    self,
+    filename: str,
+    content: str,
+) -> dict:
+            """
+            Store a dataset from text content.
+
+            Intended primarily for CSV content received
+            through remote MCP clients.
+            """
+
+            if not filename:
+                raise InvalidDatasetError(
+                    "Filename is required."
+                )
+
+            safe_filename = Path(filename).name
+
+            extension = self._validate_extension(
+                safe_filename
+            )
+
+            if extension != ".csv":
+                raise InvalidDatasetError(
+                    "Content upload currently supports CSV files only."
+                )
+
+            if not content:
+                raise InvalidDatasetError(
+                    "Dataset content is empty."
+                )
+
+            content_bytes = content.encode("utf-8")
+
+            size_bytes = len(content_bytes)
+
+            max_bytes = (
+                MAX_FILE_SIZE_MB
+                * 1024
+                * 1024
+            )
+
+            if size_bytes > max_bytes:
+                raise InvalidDatasetError(
+                    f"File exceeds the "
+                    f"{MAX_FILE_SIZE_MB} MB limit."
+                )
+
+            dataset_id = (
+                f"ds_{uuid4().hex[:12]}"
+            )
+
+            dataset_directory = (
+                RAW_DATA_DIR / dataset_id
+            )
+
+            dataset_directory.mkdir(
+                parents=True,
+                exist_ok=False,
+            )
+
+            destination = (
+                dataset_directory
+                / safe_filename
+            )
+
+            try:
+                destination.write_bytes(
+                    content_bytes
+                )
+
+                metadata = {
+                    "dataset_id": dataset_id,
+                    "filename": safe_filename,
+                    "file_type": "csv",
+                    "size_bytes": size_bytes,
+                    "status": "uploaded",
+                    "uploaded_at": datetime.now(
+                        timezone.utc
+                    ).isoformat(),
+                }
+
+                metadata_path = (
+                    METADATA_DIR
+                    / f"{dataset_id}.json"
+                )
+
+                with metadata_path.open(
+                    "w",
+                    encoding="utf-8",
+                ) as file:
+                    json.dump(
+                        metadata,
+                        file,
+                        indent=2,
+                    )
+
+                return metadata
+
+            except Exception:
+                if dataset_directory.exists():
+                    shutil.rmtree(
+                        dataset_directory
+                    )
+
+                raise    
