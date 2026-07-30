@@ -13,9 +13,21 @@ from mcp_server.tools.workflow import (
     register_workflow_tools,
 )
 import os
+import os
+
+from fastmcp import FastMCP
+from fastmcp.server.auth.providers.github import GitHubProvider
+
+
+auth = GitHubProvider(
+    client_id=os.environ["GITHUB_CLIENT_ID"],
+    client_secret=os.environ["GITHUB_CLIENT_SECRET"],
+    base_url=os.environ["BASE_URL"],
+)
 
 mcp = FastMCP(
-    "Data Analyst MCP"
+    "Data Analyst MCP",
+    auth=auth,
 )
 
 
