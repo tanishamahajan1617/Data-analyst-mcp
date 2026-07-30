@@ -12,7 +12,7 @@ from mcp_server.tools.powerbi import (
 from mcp_server.tools.workflow import (
     register_workflow_tools,
 )
-
+import os
 mcp = FastMCP(
     "Data Analyst MCP"
 )
@@ -35,4 +35,32 @@ register_workflow_tools(mcp)
 
 
 if __name__ == "__main__":
-    mcp.run()
+    transport = os.getenv(
+        "MCP_TRANSPORT",
+        "stdio",
+    )
+
+    if transport == "http":
+        host = os.getenv(
+            "MCP_HOST",
+            "0.0.0.0",
+        )
+
+        port = int(
+            os.getenv(
+                "PORT",
+                os.getenv("MCP_PORT", "8000"),
+            )
+        )
+
+        mcp.run(
+            transport="http",
+            host=host,
+            port=port,
+            path="/mcp",
+        )
+
+    else:
+        mcp.run(
+            transport="stdio",
+        )
