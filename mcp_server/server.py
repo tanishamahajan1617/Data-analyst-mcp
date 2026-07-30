@@ -13,6 +13,7 @@ from mcp_server.tools.workflow import (
     register_workflow_tools,
 )
 import os
+
 mcp = FastMCP(
     "Data Analyst MCP"
 )
