@@ -4,7 +4,7 @@ from fastmcp import FastMCP
 from fastmcp.server.auth.providers.github import GitHubProvider
 from starlette.requests import Request
 from starlette.responses import JSONResponse
-
+from app.config import ensure_data_directories
 from app.datasets.store import (
     DatasetStore,
     InvalidDatasetError,
@@ -188,8 +188,9 @@ async def http_health_check(
 # ---------------------------------------------------------
 # Server Entry Point
 # ---------------------------------------------------------
-
 if __name__ == "__main__":
+
+    ensure_data_directories()
 
     transport = os.getenv(
         "MCP_TRANSPORT",
@@ -221,7 +222,6 @@ if __name__ == "__main__":
         )
 
     else:
-
         mcp.run(
             transport="stdio",
         )
