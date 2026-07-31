@@ -133,10 +133,10 @@ async def upload_dataset_http(
         # upload is a Starlette UploadFile.
         # FastAPI UploadFile is based on the same
         # underlying implementation.
-        metadata = dataset_store.save(
-            upload
-        )
-
+        metadata = dataset_store.save_upload(
+                                upload
+                            )
+        
         return JSONResponse(
             metadata,
             status_code=201,

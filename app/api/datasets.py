@@ -77,7 +77,9 @@ def upload_dataset(
     file: UploadFile = File(...),
 ) -> DatasetUploadResponse:
     try:
-        metadata = dataset_store.save(file)
+        metadata = dataset_store.save_upload(
+                                             file
+                                            )
 
         return DatasetUploadResponse(**metadata)
 

@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
+
 from fastapi import UploadFile
 
 from app.config import (
@@ -249,3 +250,110 @@ class DatasetStore:
                     )
 
                 raise    
+
+    def save_upload(
+    self,
+    file: UploadFile,
+) -> dict:
+        """
+        Store a dataset received through an HTTP
+        multipart upload.
+        """
+
+        if not file.filename:
+            raise InvalidDatasetError(
+                "Uploaded file must have a filename."
+            )
+
+        safe_filename = Path(
+            file.filename
+        ).name
+
+        extension = self._validate_extension(
+            safe_filename
+        )
+
+        file.file.seek(0)
+
+        content = file.file.read()
+
+        if not content:
+            raise InvalidDatasetError(
+                "Uploaded file is empty."
+            )
+
+        max_bytes = (
+            MAX_FILE_SIZE_MB
+            * 1024
+            * 1024
+        )
+
+        if len(content) > max_bytes:
+            raise InvalidDatasetError(
+                f"File exceeds the "
+                f"{MAX_FILE_SIZE_MB} MB limit."
+            )
+
+        dataset_id = (
+            f"ds_{uuid4().hex[:12]}"
+        )
+
+        dataset_directory = (
+            RAW_DATA_DIR / dataset_id
+        )
+
+        dataset_directory.mkdir(
+            parents=True,
+            exist_ok=False,
+        )
+
+        destination = (
+            dataset_directory
+            / safe_filename
+        )
+
+        try:
+            with destination.open(
+                "wb"
+            ) as destination_file:
+                destination_file.write(
+                    content
+                )
+
+            metadata = {
+                "dataset_id": dataset_id,
+                "filename": safe_filename,
+                "file_type": (
+                    extension.removeprefix(".")
+                ),
+                "size_bytes": len(content),
+                "status": "uploaded",
+                "uploaded_at": datetime.now(
+                    timezone.utc
+                ).isoformat(),
+            }
+
+            metadata_path = (
+                METADATA_DIR
+                / f"{dataset_id}.json"
+            )
+
+            with metadata_path.open(
+                "w",
+                encoding="utf-8",
+            ) as metadata_file:
+                json.dump(
+                    metadata,
+                    metadata_file,
+                    indent=2,
+                )
+
+            return metadata
+
+        except Exception:
+            if dataset_directory.exists():
+                shutil.rmtree(
+                    dataset_directory
+                )
+
+            raise        
