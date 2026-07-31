@@ -1,4 +1,14 @@
+import os
+
 from fastmcp import FastMCP
+from fastmcp.server.auth.providers.github import GitHubProvider
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+
+from app.datasets.store import (
+    DatasetStore,
+    InvalidDatasetError,
+)
 
 from mcp_server.tools.dataset import (
     register_dataset_tools,
@@ -12,12 +22,11 @@ from mcp_server.tools.powerbi import (
 from mcp_server.tools.workflow import (
     register_workflow_tools,
 )
-import os
-import os
 
-from fastmcp import FastMCP
-from fastmcp.server.auth.providers.github import GitHubProvider
 
+# ---------------------------------------------------------
+# Authentication
+# ---------------------------------------------------------
 
 auth = GitHubProvider(
     client_id=os.environ["GITHUB_CLIENT_ID"],
@@ -25,15 +34,34 @@ auth = GitHubProvider(
     base_url=os.environ["BASE_URL"],
 )
 
+
+# ---------------------------------------------------------
+# MCP Server
+# ---------------------------------------------------------
+
 mcp = FastMCP(
     "Data Analyst MCP",
     auth=auth,
 )
 
 
+# ---------------------------------------------------------
+# Services
+# ---------------------------------------------------------
+
+dataset_store = DatasetStore()
+
+
+# ---------------------------------------------------------
+# MCP Tools
+# ---------------------------------------------------------
+
 @mcp.tool
 def health_check() -> dict[str, str]:
-    """Check whether the Data Analyst MCP server is running."""
+    """
+    Check whether the Data Analyst MCP server
+    is running.
+    """
 
     return {
         "status": "ok",
@@ -47,13 +75,129 @@ register_powerbi_tools(mcp)
 register_workflow_tools(mcp)
 
 
+# ---------------------------------------------------------
+# HTTP API
+# ---------------------------------------------------------
+
+@mcp.custom_route(
+    "/api/v1/datasets/upload",
+    methods=["POST"],
+)
+async def upload_dataset_http(
+    request: Request,
+) -> JSONResponse:
+    """
+    Upload a CSV or XLSX dataset using
+    multipart/form-data.
+
+    Expected field:
+        file=<CSV/XLSX>
+
+    Returns dataset metadata including dataset_id.
+    """
+
+    try:
+        form = await request.form()
+
+        upload = form.get("file")
+
+        if upload is None:
+            return JSONResponse(
+                {
+                    "detail": (
+                        "Missing multipart field 'file'."
+                    )
+                },
+                status_code=400,
+            )
+
+        filename = getattr(
+            upload,
+            "filename",
+            None,
+        )
+
+        if not filename:
+            return JSONResponse(
+                {
+                    "detail": (
+                        "Uploaded file must have "
+                        "a filename."
+                    )
+                },
+                status_code=400,
+            )
+
+        # Save using the existing DatasetStore.
+        #
+        # upload is a Starlette UploadFile.
+        # FastAPI UploadFile is based on the same
+        # underlying implementation.
+        metadata = dataset_store.save(
+            upload
+        )
+
+        return JSONResponse(
+            metadata,
+            status_code=201,
+        )
+
+    except InvalidDatasetError as exc:
+        return JSONResponse(
+            {
+                "detail": str(exc),
+            },
+            status_code=400,
+        )
+
+    except Exception as exc:
+        return JSONResponse(
+            {
+                "detail": (
+                    f"Dataset upload failed: {exc}"
+                ),
+            },
+            status_code=500,
+        )
+
+
+# ---------------------------------------------------------
+# HTTP Health Endpoint
+# ---------------------------------------------------------
+
+@mcp.custom_route(
+    "/health",
+    methods=["GET"],
+)
+async def http_health_check(
+    request: Request,
+) -> JSONResponse:
+
+    return JSONResponse(
+        {
+            "status": "ok",
+            "service": "data-analyst-mcp",
+            "mcp_endpoint": "/mcp",
+            "upload_endpoint": (
+                "/api/v1/datasets/upload"
+            ),
+        }
+    )
+
+
+# ---------------------------------------------------------
+# Server Entry Point
+# ---------------------------------------------------------
+
 if __name__ == "__main__":
+
     transport = os.getenv(
         "MCP_TRANSPORT",
         "stdio",
     )
 
     if transport == "http":
+
         host = os.getenv(
             "MCP_HOST",
             "0.0.0.0",
@@ -62,7 +206,10 @@ if __name__ == "__main__":
         port = int(
             os.getenv(
                 "PORT",
-                os.getenv("MCP_PORT", "8000"),
+                os.getenv(
+                    "MCP_PORT",
+                    "8000",
+                ),
             )
         )
 
@@ -74,6 +221,7 @@ if __name__ == "__main__":
         )
 
     else:
+
         mcp.run(
             transport="stdio",
         )
