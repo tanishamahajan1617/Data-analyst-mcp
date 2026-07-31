@@ -5,6 +5,11 @@ from fastmcp.server.auth.providers.github import GitHubProvider
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from app.config import ensure_data_directories
+from app.config import (
+    DATA_DIR,
+    METADATA_DIR,
+)
+
 from app.datasets.store import (
     DatasetStore,
     InvalidDatasetError,
@@ -192,6 +197,19 @@ if __name__ == "__main__":
 
     ensure_data_directories()
 
+    print(
+        f"DATA_DIR={DATA_DIR} "
+        f"exists={DATA_DIR.exists()}",
+        flush=True,
+    )
+
+    print(
+        f"METADATA_DIR={METADATA_DIR} "
+        f"exists={METADATA_DIR.exists()}",
+        flush=True,
+    )
+
+
     transport = os.getenv(
         "MCP_TRANSPORT",
         "stdio",
@@ -218,7 +236,7 @@ if __name__ == "__main__":
             transport="http",
             host=host,
             port=port,
-            path="/mcp",
+            path="/",
         )
 
     else:
