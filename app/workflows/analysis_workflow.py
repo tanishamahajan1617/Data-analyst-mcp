@@ -1,6 +1,6 @@
 from pathlib import Path
 from typing import Any
-
+from app.artifacts.service import ArtifactService
 from app.analytics.cleaning.executor import CleaningExecutor
 from app.analytics.cleaning.planner import CleaningPlanner
 from app.analytics.profiler import DatasetProfiler
@@ -63,6 +63,9 @@ class AnalysisWorkflow:
 
         # Power BI
         self.powerbi_builder = PowerBIProjectBuilder()
+
+        # Artifact delivery
+        self.artifact_service = ArtifactService()
 
     # =========================================================
     # FILE -> COMPLETE WORKFLOW
@@ -396,6 +399,7 @@ class AnalysisWorkflow:
         # -------------------------------------------------
 
         powerbi_result = None
+        artifact_result = None
 
         if build_dashboard:
             try:
@@ -404,9 +408,34 @@ class AnalysisWorkflow:
                         dataset_id
                     )
                 )
+
             except Exception as exc:
                 raise AnalysisWorkflowError(
                     f"Power BI project generation failed "
+                    f"for dataset '{dataset_id}'."
+                ) from exc
+
+            try:
+                project_directory = powerbi_result.get(
+                    "project_directory"
+                )
+
+                if not project_directory:
+                    raise AnalysisWorkflowError(
+                        "Power BI builder did not return "
+                        "a project_directory."
+                    )
+
+                artifact_result = (
+                    self.artifact_service.create_powerbi_archive(
+                        dataset_id=dataset_id,
+                        project_directory=project_directory,
+                    )
+                )
+
+            except Exception as exc:
+                raise AnalysisWorkflowError(
+                    f"Power BI artifact packaging failed "
                     f"for dataset '{dataset_id}'."
                 ) from exc
 
@@ -476,4 +505,9 @@ class AnalysisWorkflow:
             "powerbi": (
                 powerbi_result
             ),
+
+
+            "artifact": (
+                    artifact_result
+                ),
         }
