@@ -1,3 +1,4 @@
+import os
 import re
 import uuid
 from pathlib import Path
@@ -89,6 +90,7 @@ class SemanticModelBuilder:
         )
 
         table_content = self._build_table(
+            dataset_id=dataset_id,
             df=df,
             semantic=semantic,
             data_path=data_path,
@@ -98,6 +100,16 @@ class SemanticModelBuilder:
         table_path.write_text(
             table_content,
             encoding="utf-8",
+        )
+
+        base_url = os.environ.get(
+            "BASE_URL",
+            "http://localhost:8000",
+        ).rstrip("/")
+
+        data_url = (
+            f"{base_url}/api/v1/datasets/"
+            f"{dataset_id}/powerbi-data"
         )
 
         return {
@@ -121,9 +133,7 @@ class SemanticModelBuilder:
             "table_definition": str(
                 table_path
             ),
-            "data_source": str(
-                data_path
-            ),
+            "data_source": data_url,
         }
 
     @staticmethod
@@ -159,6 +169,7 @@ ref cultureInfo en-US
 
     def _build_table(
         self,
+        dataset_id: str,
         df: pd.DataFrame,
         semantic: dict[str, Any],
         data_path: Path,
@@ -200,11 +211,6 @@ ref cultureInfo en-US
 
         # --------------------------------------------------
         # Generated distribution columns
-        #
-        # Example:
-        #
-        # Salary Bin
-        # Salary Bin Order
         # --------------------------------------------------
 
         generated_fields: set[str] = set()
@@ -223,8 +229,6 @@ ref cultureInfo en-US
                     f"exist: {field}"
                 )
 
-            # Avoid generating the same distribution
-            # columns more than once.
             if field in generated_fields:
                 continue
 
@@ -257,6 +261,7 @@ ref cultureInfo en-US
 
         lines.extend(
             self._build_partition(
+                dataset_id=dataset_id,
                 df=df,
                 semantic=semantic,
                 data_path=data_path,
@@ -417,15 +422,28 @@ ref cultureInfo en-US
 
     def _build_partition(
         self,
+        dataset_id: str,
         df: pd.DataFrame,
         semantic: dict[str, Any],
         data_path: Path,
         distributions: list[dict[str, Any]],
     ) -> list[str]:
 
-        windows_path = str(
-            data_path.resolve()
-        ).replace(
+        # --------------------------------------------------
+        # Portable HTTP data source
+        # --------------------------------------------------
+
+        base_url = os.environ.get(
+            "BASE_URL",
+            "http://localhost:8000",
+        ).rstrip("/")
+
+        data_url = (
+            f"{base_url}/api/v1/datasets/"
+            f"{dataset_id}/powerbi-data"
+        )
+
+        escaped_data_url = data_url.replace(
             '"',
             '""',
         )
@@ -479,7 +497,7 @@ ref cultureInfo en-US
             (
                 "\t\t\t\t\t"
                 "Source = Csv.Document("
-                f'File.Contents("{windows_path}"),'
+                f'Web.Contents("{escaped_data_url}"),'
                 "[Delimiter=\",\", "
                 f"Columns={column_count}, "
                 "Encoding=65001, "
@@ -526,9 +544,6 @@ ref cultureInfo en-US
                     f"exist: {field}"
                 )
 
-            # Avoid generating duplicate M columns
-            # if the planner somehow contains the
-            # same distribution field more than once.
             if field in generated_fields:
                 continue
 
@@ -581,10 +596,6 @@ ref cultureInfo en-US
                     maximum - minimum
                 ) / bin_count
 
-            # --------------------------------------------------
-            # Generated column names
-            # --------------------------------------------------
-
             bin_name = (
                 f"{field} Bin"
             )
@@ -613,10 +624,6 @@ ref cultureInfo en-US
                 )
             )
 
-            # --------------------------------------------------
-            # Numeric constants for Power Query M
-            # --------------------------------------------------
-
             minimum_m = self._m_number(
                 minimum
             )
@@ -628,14 +635,6 @@ ref cultureInfo en-US
             bin_width_m = self._m_number(
                 bin_width
             )
-
-            # --------------------------------------------------
-            # BinStart expression
-            #
-            # Maximum value is placed into the final
-            # existing bin rather than creating an
-            # additional bin.
-            # --------------------------------------------------
 
             if minimum == maximum:
                 bin_start_expression = (
@@ -661,17 +660,6 @@ ref cultureInfo en-US
                     f"{bin_width_m}"
                 )
 
-            # --------------------------------------------------
-            # Step 1:
-            # Numeric bin-order column
-            #
-            # Salary Bin Order:
-            # 0
-            # 9000
-            # 18000
-            # ...
-            # --------------------------------------------------
-
             order_step_name = (
                 '#"Added Distribution '
                 f'Bin Order {index}"'
@@ -693,16 +681,6 @@ ref cultureInfo en-US
             distribution_steps.append(
                 order_expression
             )
-
-            # --------------------------------------------------
-            # Step 2:
-            # Human-readable bin label
-            #
-            # Salary Bin:
-            # 0 - 9000
-            # 9000 - 18000
-            # ...
-            # --------------------------------------------------
 
             bin_step_name = (
                 '#"Added Distribution '
@@ -743,10 +721,6 @@ ref cultureInfo en-US
             previous_step = (
                 bin_step_name
             )
-
-        # --------------------------------------------------
-        # Add commas between generated Power Query steps.
-        # --------------------------------------------------
 
         if distribution_steps:
             lines[-1] += ","

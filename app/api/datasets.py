@@ -1,23 +1,57 @@
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+import io
 
-from app.datasets.store import DatasetStore, InvalidDatasetError
-from app.schemas.dataset import DatasetUploadResponse
-from app.analytics.profiler import DatasetProfiler
-from app.analytics.quality import DataQualityAnalyzer
-from app.datasets.parser import DatasetParser
-from app.schemas.dataset import DatasetUploadResponse, StructuralRepairRequest
-from app.datasets.repair import (
-    StructuralRepairEngine,
-    StructuralRepairError,
+from fastapi import (
+    APIRouter,
+    File,
+    HTTPException,
+    UploadFile,
+    status,
 )
+from fastapi.responses import StreamingResponse
+
 from app.analytics.cleaning.executor import (
     CleaningExecutionError,
     CleaningExecutor,
 )
+from app.analytics.cleaning.planner import CleaningPlanner
 from app.analytics.explorer import (
     DatasetExplorer,
     ExplorationError,
 )
+from app.analytics.profiler import DatasetProfiler
+from app.analytics.quality import DataQualityAnalyzer
+
+from app.datasets.loader import (
+    DatasetLoader,
+    DatasetNotFoundError,
+    DatasetParseError,
+    DatasetStageNotFoundError,
+)
+from app.datasets.parser import DatasetParser
+from app.datasets.repair import (
+    StructuralRepairEngine,
+    StructuralRepairError,
+)
+from app.datasets.store import (
+    DatasetStore,
+    InvalidDatasetError,
+)
+
+from app.powerbi.analyser import BIAnalyzer
+from app.powerbi.builder import (
+    PowerBIProjectBuilder,
+    PowerBIProjectBuildError,
+)
+from app.powerbi.dashboard_planner import (
+    DashboardLayoutPlanner,
+)
+from app.powerbi.exporter import (
+    PowerBIExporter,
+    PowerBIExportError,
+)
+from app.powerbi.planner import DashboardPlanner
+from app.powerbi.semantic import SemanticAnalyzer
+
 from app.schemas.dataset import (
     CleaningExecutionRequest,
     DatasetUploadResponse,
@@ -25,48 +59,43 @@ from app.schemas.dataset import (
     StructuralRepairRequest,
     ValueCountsRequest,
 )
-from app.datasets.loader import (
-    DatasetLoader,
-    DatasetNotFoundError,
-    DatasetParseError,
-    DatasetStageNotFoundError,
-)
-from app.powerbi.exporter import (
-    PowerBIExporter,
-    PowerBIExportError,
-)
-from app.powerbi.builder import (
-    PowerBIProjectBuilder,
-    PowerBIProjectBuildError,
-)
 
-from app.powerbi.dashboard_planner import DashboardLayoutPlanner
-from app.analytics.cleaning.planner import CleaningPlanner
-from app.powerbi.analyser import BIAnalyzer
-from app.powerbi.semantic import SemanticAnalyzer
-from app.powerbi.planner import DashboardPlanner
 
 router = APIRouter(
     prefix="/api/v1/datasets",
     tags=["datasets"],
 )
 
+
+# ============================================================
+# SERVICES
+# ============================================================
+
 dataset_store = DatasetStore()
 dataset_profiler = DatasetProfiler()
 data_quality_analyzer = DataQualityAnalyzer()
 dataset_parser = DatasetParser()
 dataset_loader = DatasetLoader()
+
 structural_repair_engine = StructuralRepairEngine()
+
 cleaning_planner = CleaningPlanner()
 cleaning_executor = CleaningExecutor()
+
 dataset_explorer = DatasetExplorer()
+
 bi_analyzer = BIAnalyzer()
 semantic_analyzer = SemanticAnalyzer()
 dashboard_planner = DashboardPlanner()
-powerbi_exporter = PowerBIExporter()
-powerbi_project_builder = PowerBIProjectBuilder()
 dashboard_layout_planner = DashboardLayoutPlanner()
 
+powerbi_exporter = PowerBIExporter()
+powerbi_project_builder = PowerBIProjectBuilder()
+
+
+# ============================================================
+# DATASET UPLOAD
+# ============================================================
 
 @router.post(
     "/upload",
@@ -78,10 +107,12 @@ def upload_dataset(
 ) -> DatasetUploadResponse:
     try:
         metadata = dataset_store.save_upload(
-                                             file
-                                            )
+            file
+        )
 
-        return DatasetUploadResponse(**metadata)
+        return DatasetUploadResponse(
+            **metadata
+        )
 
     except InvalidDatasetError as exc:
         raise HTTPException(
@@ -90,10 +121,18 @@ def upload_dataset(
         ) from exc
 
 
+# ============================================================
+# PROFILE
+# ============================================================
+
 @router.get("/{dataset_id}/profile")
-def profile_dataset(dataset_id: str):
+def profile_dataset(
+    dataset_id: str,
+):
     try:
-        return dataset_profiler.profile(dataset_id)
+        return dataset_profiler.profile(
+            dataset_id
+        )
 
     except DatasetNotFoundError as exc:
         raise HTTPException(
@@ -108,10 +147,18 @@ def profile_dataset(dataset_id: str):
         ) from exc
 
 
+# ============================================================
+# QUALITY
+# ============================================================
+
 @router.get("/{dataset_id}/quality")
-def analyze_dataset_quality(dataset_id: str):
+def analyze_dataset_quality(
+    dataset_id: str,
+):
     try:
-        return data_quality_analyzer.analyze(dataset_id)
+        return data_quality_analyzer.analyze(
+            dataset_id
+        )
 
     except DatasetNotFoundError as exc:
         raise HTTPException(
@@ -124,18 +171,31 @@ def analyze_dataset_quality(dataset_id: str):
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(exc),
         ) from exc
-    
+
+
+# ============================================================
+# INSPECT
+# ============================================================
+
 @router.get("/{dataset_id}/inspect")
-def inspect_dataset(dataset_id: str):
+def inspect_dataset(
+    dataset_id: str,
+):
     try:
-        return dataset_parser.inspect(dataset_id)
+        return dataset_parser.inspect(
+            dataset_id
+        )
 
     except DatasetNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc),
-        ) from exc        
+        ) from exc
 
+
+# ============================================================
+# STRUCTURAL REPAIR
+# ============================================================
 
 @router.post("/{dataset_id}/repair")
 def repair_dataset_structure(
@@ -159,19 +219,28 @@ def repair_dataset_structure(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
-        ) from exc 
+        ) from exc
 
 
+# ============================================================
+# STATUS
+# ============================================================
 
 @router.get("/{dataset_id}/status")
-def get_dataset_status(dataset_id: str):
+def get_dataset_status(
+    dataset_id: str,
+):
     try:
-        metadata = dataset_loader.get_metadata(dataset_id)
+        metadata = dataset_loader.get_metadata(
+            dataset_id
+        )
 
         return {
             **metadata,
-            "active_stage": DatasetLoader().get_active_stage(
-                dataset_id
+            "active_stage": (
+                dataset_loader.get_active_stage(
+                    dataset_id
+                )
             ),
         }
 
@@ -179,9 +248,88 @@ def get_dataset_status(dataset_id: str):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc),
-        ) from exc       
+        ) from exc
+
+
+# ============================================================
+# POWER BI DATA SOURCE
+# ============================================================
+
+@router.get("/{dataset_id}/powerbi-data")
+def get_powerbi_data(
+    dataset_id: str,
+):
+    """
+    Return the active dataset as UTF-8 CSV.
+
+    Generated Power BI projects access this endpoint through
+    Web.Contents instead of using a filesystem-specific
+    File.Contents path.
+
+    DatasetLoader resolves the active dataset stage, so if
+    cleaning produced a cleaned active stage, Power BI gets
+    that stage automatically.
+    """
+
+    try:
+        # Verify that the dataset exists.
+        dataset_loader.get_metadata(
+            dataset_id
+        )
+
+        # Load the active stage.
+        df = dataset_loader.load(
+            dataset_id
+        )
+
+        csv_buffer = io.StringIO()
+
+        df.to_csv(
+            csv_buffer,
+            index=False,
+        )
+
+        csv_bytes = (
+            csv_buffer
+            .getvalue()
+            .encode("utf-8")
+        )
+
+        return StreamingResponse(
+            io.BytesIO(csv_bytes),
+            media_type="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'inline; filename="{dataset_id}.csv"'
+                ),
+                "Cache-Control": "no-store",
+            },
+        )
+
+    except DatasetNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    except (
+        DatasetParseError,
+        DatasetStageNotFoundError,
+    ) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+
+
+# ============================================================
+# CLEANING PLAN
+# ============================================================
+
 @router.get("/{dataset_id}/cleaning-plan")
-def create_cleaning_plan(dataset_id: str):
+def create_cleaning_plan(
+    dataset_id: str,
+):
     try:
         return cleaning_planner.create_plan(
             dataset_id
@@ -198,6 +346,11 @@ def create_cleaning_plan(dataset_id: str):
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
+
+
+# ============================================================
+# CLEAN DATASET
+# ============================================================
 
 @router.post("/{dataset_id}/clean")
 def clean_dataset(
@@ -236,10 +389,18 @@ def clean_dataset(
         ) from exc
 
 
+# ============================================================
+# EXPLORATION SUMMARY
+# ============================================================
+
 @router.get("/{dataset_id}/explore/summary")
-def explore_summary(dataset_id: str):
+def explore_summary(
+    dataset_id: str,
+):
     try:
-        return dataset_explorer.summary(dataset_id)
+        return dataset_explorer.summary(
+            dataset_id
+        )
 
     except DatasetNotFoundError as exc:
         raise HTTPException(
@@ -253,8 +414,15 @@ def explore_summary(dataset_id: str):
             detail=str(exc),
         ) from exc
 
+
+# ============================================================
+# NUMERIC STATISTICS
+# ============================================================
+
 @router.get("/{dataset_id}/explore/statistics")
-def explore_statistics(dataset_id: str):
+def explore_statistics(
+    dataset_id: str,
+):
     try:
         return dataset_explorer.numeric_statistics(
             dataset_id
@@ -270,10 +438,17 @@ def explore_statistics(dataset_id: str):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
-        ) from exc    
-    
+        ) from exc
+
+
+# ============================================================
+# CORRELATIONS
+# ============================================================
+
 @router.get("/{dataset_id}/explore/correlations")
-def explore_correlations(dataset_id: str):
+def explore_correlations(
+    dataset_id: str,
+):
     try:
         return dataset_explorer.correlations(
             dataset_id
@@ -290,6 +465,11 @@ def explore_correlations(dataset_id: str):
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
+
+
+# ============================================================
+# VALUE COUNTS
+# ============================================================
 
 @router.post("/{dataset_id}/explore/value-counts")
 def explore_value_counts(
@@ -319,8 +499,12 @@ def explore_value_counts(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
-        ) from exc  
+        ) from exc
 
+
+# ============================================================
+# GROUP BY
+# ============================================================
 
 @router.post("/{dataset_id}/explore/group-by")
 def explore_group_by(
@@ -351,8 +535,12 @@ def explore_group_by(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
-        ) from exc  
+        ) from exc
 
+
+# ============================================================
+# BI ANALYSIS
+# ============================================================
 
 @router.get("/{dataset_id}/bi/analyze")
 def analyze_dataset_for_bi(
@@ -373,7 +561,12 @@ def analyze_dataset_for_bi(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
-        ) from exc        
+        ) from exc
+
+
+# ============================================================
+# SEMANTIC ANALYSIS
+# ============================================================
 
 @router.get("/{dataset_id}/bi/semantic")
 def analyze_dataset_semantics(
@@ -397,6 +590,10 @@ def analyze_dataset_semantics(
         ) from exc
 
 
+# ============================================================
+# DASHBOARD PLAN
+# ============================================================
+
 @router.get("/{dataset_id}/bi/dashboard-plan")
 def create_dashboard_plan(
     dataset_id: str,
@@ -416,8 +613,12 @@ def create_dashboard_plan(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
-        ) from exc  
+        ) from exc
 
+
+# ============================================================
+# DASHBOARD LAYOUT
+# ============================================================
 
 @router.get("/{dataset_id}/bi/dashboard")
 def get_dashboard_layout(
@@ -425,7 +626,12 @@ def get_dashboard_layout(
 ):
     return dashboard_layout_planner.create_layout(
         dataset_id
-    )     
+    )
+
+
+# ============================================================
+# POWER BI EXPORT
+# ============================================================
 
 @router.post("/{dataset_id}/bi/export")
 def export_dataset_for_powerbi(
@@ -452,16 +658,22 @@ def export_dataset_for_powerbi(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
-        ) from exc   
+        ) from exc
 
+
+# ============================================================
+# BUILD POWER BI PROJECT
+# ============================================================
 
 @router.post("/{dataset_id}/bi/build-project")
 def build_powerbi_project(
     dataset_id: str,
 ):
     try:
-        # Verify the dataset actually exists first.
-        dataset_loader.get_metadata(dataset_id)
+        # Verify dataset exists before attempting project build.
+        dataset_loader.get_metadata(
+            dataset_id
+        )
 
         return powerbi_project_builder.build(
             dataset_id
