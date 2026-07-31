@@ -1,6 +1,6 @@
 from pathlib import Path
 from typing import Any
-
+import os
 from app.datasets.loader import DatasetLoader
 from app.datasets.parser import DatasetParser
 from app.datasets.repair import StructuralRepairEngine
@@ -169,3 +169,28 @@ def register_dataset_tools(mcp) -> None:
                 filename=filename,
                 content=content,
             )
+    
+    @mcp.tool
+    def get_dataset_upload_url() -> dict[str, str]:
+        """
+        Get the upload page for a new CSV or XLSX dataset.
+
+        Use this tool when the user wants to analyze a dataset,
+        perform data analysis, or build a dashboard, but no
+        dataset_id is available yet.
+
+        Direct the user to the returned upload URL. After the
+        dataset is uploaded, use the returned dataset_id with
+        the analysis workflow.
+        """
+
+        base_url = os.environ["BASE_URL"].rstrip("/")
+
+        return {
+            "upload_url": f"{base_url}/upload",
+            "instructions": (
+                "Ask the user to upload their CSV or XLSX dataset "
+                "using this page. After upload, use the generated "
+                "dataset_id to analyze the dataset and build the dashboard."
+            ),
+        }
