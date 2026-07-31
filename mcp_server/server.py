@@ -3,7 +3,11 @@ import os
 from fastmcp import FastMCP
 from fastmcp.server.auth.providers.github import GitHubProvider
 from starlette.requests import Request
-from starlette.responses import JSONResponse,HTMLResponse
+from starlette.responses import JSONResponse,HTMLResponse,FileResponse
+from app.artifacts.service import (
+    ArtifactService,
+    ArtifactNotFoundError,
+)
 from app.config import ensure_data_directories
 from app.config import (
     DATA_DIR,
@@ -55,6 +59,7 @@ mcp = FastMCP(
 # ---------------------------------------------------------
 
 dataset_store = DatasetStore()
+artifact_service = ArtifactService()
 
 
 # ---------------------------------------------------------
@@ -473,6 +478,41 @@ async def http_health_check(
                 "/api/v1/datasets/upload"
             ),
         }
+    )
+
+
+@mcp.custom_route(
+    "/api/v1/exports/{dataset_id}/download",
+    methods=["GET"],
+)
+async def download_powerbi_artifact(
+    request: Request,
+) -> FileResponse:
+
+    dataset_id = request.path_params["dataset_id"]
+
+    try:
+        archive_path = (
+            artifact_service.get_powerbi_archive(
+                dataset_id
+            )
+        )
+
+    except ArtifactNotFoundError:
+        return JSONResponse(
+            {
+                "detail": (
+                    f"No Power BI artifact found "
+                    f"for dataset '{dataset_id}'."
+                )
+            },
+            status_code=404,
+        )
+
+    return FileResponse(
+        path=archive_path,
+        filename=f"{dataset_id}_powerbi_dashboard.zip",
+        media_type="application/zip",
     )
 
 

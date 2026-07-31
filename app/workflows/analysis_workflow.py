@@ -1,5 +1,8 @@
+import os
+
 from pathlib import Path
 from typing import Any
+
 from app.artifacts.service import ArtifactService
 from app.analytics.cleaning.executor import CleaningExecutor
 from app.analytics.cleaning.planner import CleaningPlanner
@@ -31,6 +34,7 @@ class AnalysisWorkflow:
         -> dashboard planning
         -> dashboard layout
         -> Power BI project
+        -> downloadable artifact
 
     The workflow coordinates existing application
     services and does not duplicate their internal logic.
@@ -415,6 +419,10 @@ class AnalysisWorkflow:
                     f"for dataset '{dataset_id}'."
                 ) from exc
 
+            # ---------------------------------------------
+            # Package generated PBIP project
+            # ---------------------------------------------
+
             try:
                 project_directory = powerbi_result.get(
                     "project_directory"
@@ -431,6 +439,18 @@ class AnalysisWorkflow:
                         dataset_id=dataset_id,
                         project_directory=project_directory,
                     )
+                )
+
+                # Public application URL used by the client
+                # to download the generated Power BI project.
+                base_url = os.environ.get(
+                    "BASE_URL",
+                    "http://localhost:8000",
+                ).rstrip("/")
+
+                artifact_result["download_url"] = (
+                    f"{base_url}/api/v1/exports/"
+                    f"{dataset_id}/download"
                 )
 
             except Exception as exc:
@@ -506,8 +526,7 @@ class AnalysisWorkflow:
                 powerbi_result
             ),
 
-
             "artifact": (
-                    artifact_result
-                ),
+                artifact_result
+            ),
         }
