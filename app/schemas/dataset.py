@@ -36,4 +36,21 @@ class ValueCountsRequest(BaseModel):
 class GroupByRequest(BaseModel):
     group_column: str
     value_column: str
-    aggregation: str    
+    aggregation: str
+
+
+class DatasetUploadResponse(BaseModel):
+
+    success: bool = True
+
+    dataset_id: str
+
+    filename: str
+
+    file_type: str
+
+    rows: int
+
+    columns: int
+
+    status: str        

@@ -8,6 +8,7 @@ from app.artifacts.service import (
     ArtifactService,
     ArtifactNotFoundError,
 )
+from pathlib import Path
 from app.config import ensure_data_directories
 from app.config import (
     DATA_DIR,
@@ -60,6 +61,16 @@ mcp = FastMCP(
 
 dataset_store = DatasetStore()
 artifact_service = ArtifactService()
+
+BASE_DIR = Path(__file__).parent
+
+TEMPLATE_DIR = (
+    BASE_DIR / "templates"
+)
+
+STATIC_DIR = (
+    BASE_DIR / "static"
+)
 
 
 # ---------------------------------------------------------
@@ -176,285 +187,52 @@ async def upload_dataset_http(
 )
 async def upload_page(
     request: Request,
-) -> HTMLResponse:
-    html = """
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta
-            name="viewport"
-            content="width=device-width, initial-scale=1.0"
-        >
+) -> FileResponse:
 
-        <title>Data Analyst MCP - Upload Dataset</title>
+    return FileResponse(
+        TEMPLATE_DIR / "upload.html",
+        media_type="text/html",
+    )
 
-        <style>
-            * {
-                box-sizing: border-box;
-            }
 
-            body {
-                margin: 0;
-                min-height: 100vh;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-family: Arial, sans-serif;
-                background: #f5f5f5;
-                padding: 24px;
-            }
+@mcp.custom_route(
+    "/static/upload.css",
+    methods=["GET"],
+)
+async def upload_css(
+    request: Request,
+) -> FileResponse:
 
-            .card {
-                width: 100%;
-                max-width: 560px;
-                background: white;
-                padding: 32px;
-                border-radius: 14px;
-                box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
-            }
+    return FileResponse(
+        STATIC_DIR / "upload.css",
+        media_type="text/css",
+    )
 
-            h1 {
-                margin-top: 0;
-                margin-bottom: 8px;
-            }
+@mcp.custom_route(
+    "/static/upload.js",
+    methods=["GET"],
+)
+async def upload_js(
+    request: Request,
+) -> FileResponse:
 
-            .subtitle {
-                margin-top: 0;
-                margin-bottom: 28px;
-                color: #666;
-            }
+    return FileResponse(
+        STATIC_DIR / "upload.js",
+        media_type="application/javascript",
+    )
 
-            input[type="file"] {
-                width: 100%;
-                padding: 14px;
-                border: 1px solid #ddd;
-                border-radius: 8px;
-                margin-bottom: 16px;
-            }
+@mcp.custom_route(
+    "/static/upload.js",
+    methods=["GET"],
+)
+async def upload_js(
+    request: Request,
+) -> FileResponse:
 
-            button {
-                width: 100%;
-                padding: 13px 16px;
-                border: 0;
-                border-radius: 8px;
-                cursor: pointer;
-                font-size: 16px;
-            }
-
-            #uploadButton {
-                background: #111;
-                color: white;
-            }
-
-            #uploadButton:disabled {
-                opacity: 0.6;
-                cursor: not-allowed;
-            }
-
-            #result {
-                display: none;
-                margin-top: 24px;
-                padding: 18px;
-                background: #f7f7f7;
-                border-radius: 8px;
-            }
-
-            #datasetId {
-                display: block;
-                margin: 10px 0;
-                padding: 10px;
-                background: white;
-                border: 1px solid #ddd;
-                border-radius: 6px;
-                overflow-wrap: anywhere;
-            }
-
-            #copyButton {
-                margin-top: 10px;
-                background: #e9e9e9;
-            }
-
-            #error {
-                display: none;
-                margin-top: 20px;
-                padding: 14px;
-                border-radius: 8px;
-                background: #ffe8e8;
-                color: #9c1c1c;
-            }
-        </style>
-    </head>
-
-    <body>
-        <div class="card">
-
-            <h1>Upload Dataset</h1>
-
-            <p class="subtitle">
-                Upload a CSV or XLSX dataset for Data Analyst MCP.
-            </p>
-
-            <form id="uploadForm">
-
-                <input
-                    id="fileInput"
-                    name="file"
-                    type="file"
-                    accept=".csv,.xlsx"
-                    required
-                >
-
-                <button
-                    id="uploadButton"
-                    type="submit"
-                >
-                    Upload Dataset
-                </button>
-
-            </form>
-
-            <div id="result">
-
-                <strong>Dataset uploaded successfully</strong>
-
-                <span id="datasetId"></span>
-
-                <button
-                    id="copyButton"
-                    type="button"
-                >
-                    Copy Dataset ID
-                </button>
-
-            </div>
-
-            <div id="error"></div>
-
-        </div>
-
-        <script>
-            const form =
-                document.getElementById("uploadForm");
-
-            const fileInput =
-                document.getElementById("fileInput");
-
-            const uploadButton =
-                document.getElementById("uploadButton");
-
-            const result =
-                document.getElementById("result");
-
-            const datasetId =
-                document.getElementById("datasetId");
-
-            const copyButton =
-                document.getElementById("copyButton");
-
-            const error =
-                document.getElementById("error");
-
-            form.addEventListener(
-                "submit",
-                async (event) => {
-
-                    event.preventDefault();
-
-                    result.style.display = "none";
-                    error.style.display = "none";
-
-                    const file =
-                        fileInput.files[0];
-
-                    if (!file) {
-                        return;
-                    }
-
-                    const formData =
-                        new FormData();
-
-                    formData.append(
-                        "file",
-                        file,
-                    );
-
-                    uploadButton.disabled = true;
-                    uploadButton.textContent =
-                        "Uploading...";
-
-                    try {
-
-                        const response =
-                            await fetch(
-                                "/api/v1/datasets/upload",
-                                {
-                                    method: "POST",
-                                    body: formData,
-                                }
-                            );
-
-                        const data =
-                            await response.json();
-
-                        if (!response.ok) {
-                            throw new Error(
-                                data.detail ||
-                                "Dataset upload failed."
-                            );
-                        }
-
-                        datasetId.textContent =
-                            data.dataset_id;
-
-                        result.style.display =
-                            "block";
-
-                    } catch (uploadError) {
-
-                        error.textContent =
-                            uploadError.message;
-
-                        error.style.display =
-                            "block";
-
-                    } finally {
-
-                        uploadButton.disabled =
-                            false;
-
-                        uploadButton.textContent =
-                            "Upload Dataset";
-                    }
-                }
-            );
-
-            copyButton.addEventListener(
-                "click",
-                async () => {
-
-                    await navigator.clipboard.writeText(
-                        datasetId.textContent
-                    );
-
-                    copyButton.textContent =
-                        "Copied!";
-
-                    setTimeout(
-                        () => {
-                            copyButton.textContent =
-                                "Copy Dataset ID";
-                        },
-                        1500
-                    );
-                }
-            );
-        </script>
-    </body>
-    </html>
-    """
-
-    return HTMLResponse(html) 
+    return FileResponse(
+        STATIC_DIR / "upload.js",
+        media_type="application/javascript",
+    )
 
 
 # ---------------------------------------------------------

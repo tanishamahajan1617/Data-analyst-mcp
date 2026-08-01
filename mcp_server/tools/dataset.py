@@ -1,61 +1,48 @@
-from pathlib import Path
-from typing import Any
 import os
+from typing import Any
+
 from app.datasets.loader import DatasetLoader
 from app.datasets.parser import DatasetParser
 from app.datasets.repair import StructuralRepairEngine
-from app.datasets.store import DatasetStore
-from app.datasets.remote import RemoteDatasetImporter
 
 
 def register_dataset_tools(mcp) -> None:
     loader = DatasetLoader()
     parser = DatasetParser()
     repair_engine = StructuralRepairEngine()
-    store = DatasetStore()
-    remote_importer = RemoteDatasetImporter()
-
 
     @mcp.tool
-    def import_dataset(
-        file_path: str,
-    ) -> dict[str, Any]:
+    def get_dataset_upload_url() -> dict[str, str]:
         """
-        Import a local CSV or XLSX file into the
-        Data Analyst system.
+        Get the upload page for a new dataset.
 
-        Returns a dataset_id that can be used by
-        the other analysis and dashboard tools.
-        """
+        This is the ONLY supported ingestion workflow for
+        new datasets.
 
-        return store.save_path(
-            source_path=Path(file_path),
-        )
+        Use this tool whenever the user wants to analyze
+        a CSV or XLSX dataset and no dataset_id is available.
 
-    @mcp.tool
-    def import_dataset_from_url(
-        url: str,
-        filename: str | None = None,
-    ) -> dict[str, Any]:
-        """
-        Import a CSV or XLSX dataset from a public HTTP
-        or HTTPS URL.
+        Do NOT attempt to import local files, attached files,
+        copied CSV text, or client-local file paths.
 
-        Use this tool when the MCP server is running
-        remotely and the dataset is not available on
-        the server's local filesystem.
+        Direct the user to the upload page. After upload
+        completes, continue the analysis using the returned
+        dataset_id.
 
-        The URL must point directly to a downloadable
-        CSV or XLSX file.
-
-        Returns a dataset_id for use by the analysis,
-        cleaning, and dashboard tools.
+        This guarantees that the complete original dataset
+        reaches the Data Analyst platform.
         """
 
-        return remote_importer.import_url(
-            url=url,
-            filename=filename,
-        )
+        base_url = os.environ["BASE_URL"].rstrip("/")
+
+        return {
+            "upload_url": f"{base_url}/upload",
+            "instructions": (
+                "Ask the user to upload their dataset using this page. "
+                "After upload completes, continue the analysis using "
+                "the returned dataset_id."
+            ),
+        }
 
     @mcp.tool
     def get_dataset_metadata(
@@ -88,7 +75,9 @@ def register_dataset_tools(mcp) -> None:
         parseability and available sheets.
         """
 
-        return parser.inspect(dataset_id)
+        return parser.inspect(
+            dataset_id
+        )
 
     @mcp.tool
     def get_dataset_info(
@@ -99,8 +88,14 @@ def register_dataset_tools(mcp) -> None:
         version of a dataset.
         """
 
-        metadata = loader.get_metadata(dataset_id)
-        stage = loader.get_active_stage(dataset_id)
+        metadata = loader.get_metadata(
+            dataset_id
+        )
+
+        stage = loader.get_active_stage(
+            dataset_id
+        )
+
         path = loader.get_path(
             dataset_id,
             stage=stage,
@@ -145,52 +140,3 @@ def register_dataset_tools(mcp) -> None:
             row_number=row_number,
             merge_into_column=merge_into_column,
         )
-    @mcp.tool
-    def upload_dataset_content(
-    filename: str,
-    content: str,
-  ) -> dict[str, Any]:
-            """
-            Upload a CSV dataset directly from its text content.
-
-            Use this tool when the client has access to an
-            uploaded CSV attachment but the remote MCP server
-            cannot access the client's local filesystem.
-
-            The client should read the CSV attachment and pass
-            its complete text content together with the original
-            filename.
-
-            Returns a dataset_id that can be used by analysis,
-            cleaning, and dashboard tools.
-            """
-
-            return store.save_content(
-                filename=filename,
-                content=content,
-            )
-    
-    @mcp.tool
-    def get_dataset_upload_url() -> dict[str, str]:
-        """
-        Get the upload page for a new CSV or XLSX dataset.
-
-        Use this tool when the user wants to analyze a dataset,
-        perform data analysis, or build a dashboard, but no
-        dataset_id is available yet.
-
-        Direct the user to the returned upload URL. After the
-        dataset is uploaded, use the returned dataset_id with
-        the analysis workflow.
-        """
-
-        base_url = os.environ["BASE_URL"].rstrip("/")
-
-        return {
-            "upload_url": f"{base_url}/upload",
-            "instructions": (
-                "Ask the user to upload their CSV or XLSX dataset "
-                "using this page. After upload, use the generated "
-                "dataset_id to analyze the dataset and build the dashboard."
-            ),
-        }

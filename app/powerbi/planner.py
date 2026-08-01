@@ -1,86 +1,163 @@
 from typing import Any
 
 from app.powerbi.semantic import SemanticAnalyzer
+from app.powerbi.ranking import DashboardRanking
+from app.powerbi.kpi_selector import KPISelector
+from app.powerbi.visual_selector import VisualSelector
+from app.powerbi.relationship_detector import (
+    RelationshipDetector,
+)
 
 
 class DashboardPlanner:
+    """
+    Dashboard Planner V2
+
+    Orchestrates the dashboard planning pipeline.
+
+    Semantic Analysis
+            ↓
+    Measure / Dimension Ranking
+            ↓
+    KPI Selection
+            ↓
+    Relationship Detection
+            ↓
+    Visual Selection
+            ↓
+    Slicer Selection
+            ↓
+    Dashboard Plan
+    """
+
     def __init__(self) -> None:
-        self.semantic_analyzer = SemanticAnalyzer()
+
+        self.semantic = SemanticAnalyzer()
+
+        self.ranking = DashboardRanking()
+
+        self.kpi_selector = KPISelector()
+
+        self.visual_selector = VisualSelector()
+
+        self.relationship_detector = (
+            RelationshipDetector()
+        )
 
     def create_plan(
         self,
         dataset_id: str,
     ) -> dict[str, Any]:
 
-        semantic = self.semantic_analyzer.analyze(
+        semantic = self.semantic.analyze(
             dataset_id
         )
 
         columns = semantic["columns"]
 
-        identifiers = self._columns_by_role(
+        identifiers = self._role(
             columns,
             "identifier",
         )
 
-        dimensions = self._columns_by_role(
+        dimensions = self._role(
             columns,
             "dimension",
         )
 
-        datetimes = self._columns_by_role(
+        datetimes = self._role(
             columns,
             "datetime",
         )
 
-        currencies = self._columns_by_role(
-            columns,
-            "currency",
-        )
-
-        measures = self._columns_by_role(
+        measures = self._role(
             columns,
             "measure",
         )
 
-        percentages = self._columns_by_role(
+        currencies = self._role(
+            columns,
+            "currency",
+        )
+
+        percentages = self._role(
             columns,
             "percentage",
         )
 
-        numeric_fields = (
-            currencies
-            + measures
-            + percentages
+        ranked_measures = (
+            self.ranking.rank_measures(
+                currencies
+                + measures
+                + percentages
+            )
         )
 
-        kpis = self._build_kpis(
+        ranked_dimensions = (
+            self.ranking.rank_dimensions(
+                dimensions
+            )
+        )
+
+        kpis = self.kpi_selector.select(
             identifiers=identifiers,
-            numeric_fields=numeric_fields,
+            measures=measures,
+            currencies=currencies,
+            percentages=percentages,
         )
 
-        visuals = self._build_visuals(
-            dimensions=dimensions,
+        visuals = self.visual_selector.select(
+            measures=measures,
+            currencies=currencies,
+            percentages=percentages,
+            dimensions=ranked_dimensions,
             datetimes=datetimes,
-            numeric_fields=numeric_fields,
+        )
+
+        relationships = (
+            self.relationship_detector.detect(
+                measures=measures,
+                currencies=currencies,
+                percentages=percentages,
+                dimensions=ranked_dimensions,
+            )
+        )
+
+        visuals.extend(
+            relationships
         )
 
         slicers = self._build_slicers(
-            dimensions=dimensions,
-            datetimes=datetimes,
+            ranked_dimensions,
+            datetimes,
         )
 
         return {
             "dataset_id": dataset_id,
             "title": "Data Analysis Dashboard",
+            "planner_version": "v2",
             "source_stage": semantic["stage"],
             "kpis": kpis,
             "visuals": visuals,
             "slicers": slicers,
+            "summary": {
+                "measure_count": len(
+                    ranked_measures
+                ),
+                "dimension_count": len(
+                    ranked_dimensions
+                ),
+                "visual_count": len(
+                    visuals
+                ),
+                "kpi_count": len(
+                    kpis
+                ),
+            },
         }
 
     @staticmethod
-    def _columns_by_role(
+    def _role(
         columns: list[dict[str, Any]],
         role: str,
     ) -> list[dict[str, Any]]:
@@ -91,138 +168,6 @@ class DashboardPlanner:
             if column["semantic_role"] == role
         ]
 
-    def _build_kpis(
-        self,
-        identifiers: list[dict[str, Any]],
-        numeric_fields: list[dict[str, Any]],
-    ) -> list[dict[str, Any]]:
-
-        kpis = []
-
-        # One useful distinct-count KPI.
-        if identifiers:
-            identifier = identifiers[0]
-
-            kpis.append(
-                {
-                    "type": "card",
-                    "title": (
-                        f"Distinct "
-                        f"{self._display_name(identifier['name'])}"
-                    ),
-                    "field": identifier["name"],
-                    "aggregation": "distinct_count",
-                }
-            )
-
-        # Up to three numeric KPIs.
-        for column in numeric_fields[:3]:
-            aggregation = (
-                column["suggested_aggregation"]
-                or "sum"
-            )
-
-            kpis.append(
-                {
-                    "type": "card",
-                    "title": self._kpi_title(
-                        column["name"],
-                        aggregation,
-                    ),
-                    "field": column["name"],
-                    "aggregation": aggregation,
-                }
-            )
-
-        return kpis
-
-    def _build_visuals(
-        self,
-        dimensions: list[dict[str, Any]],
-        datetimes: list[dict[str, Any]],
-        numeric_fields: list[dict[str, Any]],
-    ) -> list[dict[str, Any]]:
-
-        visuals = []
-
-        if not numeric_fields:
-            return visuals
-
-        primary_measure = numeric_fields[0]
-
-        measure_name = primary_measure["name"]
-
-        aggregation = (
-            primary_measure["suggested_aggregation"]
-            or "sum"
-        )
-
-        # Time trend.
-        if datetimes:
-            date_column = datetimes[0]["name"]
-
-            visuals.append(
-                {
-                    "type": "line_chart",
-                    "title": (
-                        f"{self._display_name(measure_name)} "
-                        "Trend"
-                    ),
-                    "x": date_column,
-                    "y": measure_name,
-                    "aggregation": aggregation,
-                }
-            )
-
-        # Comparison by dimension.
-        if dimensions:
-            dimension = dimensions[0]["name"]
-
-            visuals.append(
-                {
-                    "type": "bar_chart",
-                    "title": (
-                        f"{self._display_name(measure_name)} "
-                        f"by {self._display_name(dimension)}"
-                    ),
-                    "category": dimension,
-                    "value": measure_name,
-                    "aggregation": aggregation,
-                }
-            )
-
-        # Second useful dimension if available.
-        if len(dimensions) >= 2:
-            dimension = dimensions[1]["name"]
-
-            visuals.append(
-                {
-                    "type": "column_chart",
-                    "title": (
-                        f"{self._display_name(measure_name)} "
-                        f"by {self._display_name(dimension)}"
-                    ),
-                    "category": dimension,
-                    "value": measure_name,
-                    "aggregation": aggregation,
-                }
-            )
-
-        # Distribution for a numeric field.
-        visuals.append(
-            {
-                "type": "distribution_chart",
-                "title": (
-                    f"{self._display_name(measure_name)} "
-                    "Distribution"
-                ),
-                "field": measure_name,
-                "bin_count": 10,
-            }
-        )
-
-        return visuals
-
     @staticmethod
     def _build_slicers(
         dimensions: list[dict[str, Any]],
@@ -231,7 +176,8 @@ class DashboardPlanner:
 
         slicers = []
 
-        for dimension in dimensions[:2]:
+        for dimension in dimensions[:3]:
+
             slicers.append(
                 {
                     "type": "slicer",
@@ -240,6 +186,7 @@ class DashboardPlanner:
             )
 
         if datetimes:
+
             slicers.append(
                 {
                     "type": "date_slicer",
@@ -248,41 +195,3 @@ class DashboardPlanner:
             )
 
         return slicers
-
-    @staticmethod
-    def _kpi_title(
-        field: str,
-        aggregation: str,
-    ) -> str:
-
-        display_name = DashboardPlanner._display_name(
-            field
-        )
-
-        labels = {
-            "sum": "Total",
-            "average": "Average",
-            "distinct_count": "Distinct",
-            "count": "Count",
-            "min": "Minimum",
-            "max": "Maximum",
-        }
-
-        prefix = labels.get(
-            aggregation,
-            aggregation.title(),
-        )
-
-        return f"{prefix} {display_name}"
-
-    @staticmethod
-    def _display_name(
-        field: str,
-    ) -> str:
-
-        return (
-            field
-            .replace("_", " ")
-            .strip()
-            .title()
-        )

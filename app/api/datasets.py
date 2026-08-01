@@ -105,13 +105,27 @@ powerbi_project_builder = PowerBIProjectBuilder()
 def upload_dataset(
     file: UploadFile = File(...),
 ) -> DatasetUploadResponse:
+
     try:
+
         metadata = dataset_store.save_upload(
             file
         )
 
+        dataset_id = metadata["dataset_id"]
+
+        df = dataset_loader.load(
+            dataset_id
+        )
+
         return DatasetUploadResponse(
-            **metadata
+            success=True,
+            dataset_id=dataset_id,
+            filename=metadata["filename"],
+            file_type=metadata["file_type"],
+            rows=int(len(df)),
+            columns=int(len(df.columns)),
+            status="ready",
         )
 
     except InvalidDatasetError as exc:

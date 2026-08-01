@@ -21,24 +21,85 @@ def register_workflow_tools(
         build_dashboard: bool = True,
     ) -> dict[str, Any]:
         """
-        Run the complete autonomous data-analysis and dashboard workflow
-        for a dataset already uploaded to the Data Analyst MCP server.
+        Run the complete autonomous data-analysis workflow
+        for a dataset that already exists on the Data
+        Analyst platform.
 
-        A valid dataset_id is required.
+        Parameters
+        ----------
+        dataset_id:
+            Identifier of an existing uploaded dataset.
 
-        If the user has a new dataset, including a file attached in Claude,
-        and no dataset_id exists yet, do NOT attempt to use the attachment's
-        local file path.
+        clean:
+            Automatically execute safe cleaning operations
+            before analysis.
 
-        Client-local paths such as /mnt/user-data/uploads/... are not
-        accessible to this remote MCP server.
+        build_dashboard:
+            Generate a Power BI PBIP project and package
+            all generated dashboard artifacts.
 
-        For a new dataset, use get_dataset_upload_url first. After the user
-        uploads the dataset and receives a dataset_id, call this tool.
+        ------------------------------------------------------------------
+        IMPORTANT
+        ------------------------------------------------------------------
 
-        This workflow performs profiling, quality assessment, safe cleaning,
-        semantic analysis, KPI discovery, dashboard planning, layout
-        generation, Power BI PBIP generation, and artifact packaging.
+        A valid dataset_id is REQUIRED.
+
+        This tool ONLY works with datasets that have already
+        been uploaded to the Data Analyst platform.
+
+        If the user wants to analyze a new CSV or XLSX dataset
+        and no dataset_id is available:
+
+        1. Call get_dataset_upload_url().
+        2. Direct the user to the upload page.
+        3. Wait until the upload completes.
+        4. Obtain the returned dataset_id.
+        5. Call analyze_and_build_dashboard().
+
+        ------------------------------------------------------------------
+        DO NOT
+        ------------------------------------------------------------------
+
+        Never attempt to analyze:
+
+        • attached files
+        • local filesystem paths
+        • client-local paths
+          (for example /mnt/user-data/uploads/...)
+        • copied CSV content
+        • copied Excel content
+        • partial datasets
+        • truncated dataset contents
+
+        Remote MCP servers cannot reliably access
+        client-local attachments or local filesystem
+        paths.
+
+        The upload page is the ONLY supported ingestion
+        workflow for new datasets.
+
+        ------------------------------------------------------------------
+        WORKFLOW
+        ------------------------------------------------------------------
+
+        This workflow automatically performs:
+
+        • Dataset profiling
+        • Data quality assessment
+        • Cleaning plan generation
+        • Safe automatic cleaning
+        • Exploratory data analysis
+        • Semantic role detection
+        • KPI discovery
+        • Dashboard planning
+        • Dashboard layout generation
+        • Power BI PBIP generation
+        • Dashboard artifact packaging
+
+        Returns
+        -------
+        Complete workflow results including all generated
+        analysis outputs and Power BI artifacts.
         """
 
         return workflow.run(

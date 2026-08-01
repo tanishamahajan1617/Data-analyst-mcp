@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>
+        Data Analyst MCP
+    </title>
+
+    <link
+        rel="stylesheet"
+        href="/static/upload.css"
+    >
+
+</head>
+
+<body>
+
+<div class="page">
+
+    <div class="card">
+
+        <div class="header">
+
+            <h1>
+                Upload Dataset
+            </h1>
+
+            <p>
+                Upload a CSV or XLSX dataset for analysis.
+            </p>
+
+        </div>
+
+        <form id="uploadForm">
+
+            <input
+                id="fileInput"
+                type="file"
+                name="file"
+                accept=".csv,.xlsx"
+                required
+            >
+
+            <button
+                id="uploadButton"
+                type="submit"
+            >
+                Upload Dataset
+            </button>
+
+        </form>
+
+        <div
+            id="loading"
+            class="loading"
+            hidden
+        >
+
+            Uploading dataset...
+
+        </div>
+
+        <div
+            id="error"
+            class="error"
+            hidden
+        >
+        </div>
+
+        <div
+            id="result"
+            class="result"
+            hidden
+        >
+
+            <h2>
+
+                ✅ Dataset Uploaded Successfully
+
+            </h2>
+
+            <table class="summary">
+
+                <tr>
+
+                    <th>
+                        Filename
+                    </th>
+
+                    <td id="filename">
+                    </td>
+
+                </tr>
+
+                <tr>
+
+                    <th>
+                        Dataset ID
+                    </th>
+
+                    <td id="datasetId">
+                    </td>
+
+                </tr>
+
+                <tr>
+
+                    <th>
+                        Rows
+                    </th>
+
+                    <td id="rows">
+                    </td>
+
+                </tr>
+
+                <tr>
+
+                    <th>
+                        Columns
+                    </th>
+
+                    <td id="columns">
+                    </td>
+
+                </tr>
+
+                <tr>
+
+                    <th>
+                        Status
+                    </th>
+
+                    <td>
+
+                        Ready for Analysis
+
+                    </td>
+
+                </tr>
+
+            </table>
+
+            <hr>
+
+            <div class="continue">
+
+                <h3>
+
+                    Continue in Claude
+
+                </h3>
+
+                <p>
+
+                    Copy the message below and
+                    send it to Claude.
+
+                </p>
+
+                <textarea
+
+                    id="continueMessage"
+
+                    readonly
+
+                    rows="7"
+
+                ></textarea>
+
+                <button
+
+                    id="copyButton"
+
+                    type="button"
+
+                >
+
+                    Copy Message
+
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+<script src="/static/upload.js"></script>
+
+</body>
+</html>
