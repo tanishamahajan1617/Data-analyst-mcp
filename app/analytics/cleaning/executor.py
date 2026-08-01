@@ -2,13 +2,13 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-
+import re
 from app.config import CLEANED_DATA_DIR
-from app.datasets.loader import DatasetLoader
 from app.datasets.loader import (
     DatasetLoader,
     DatasetStageNotFoundError,
 )
+
 
 class CleaningExecutionError(Exception):
     pass
@@ -26,7 +26,9 @@ class CleaningExecutor:
 
         # Cleaning should start from repaired if available,
         # otherwise raw. Never start from an existing cleaned copy.
-        source_stage = self._get_source_stage(dataset_id)
+        source_stage = self._get_source_stage(
+            dataset_id
+        )
 
         df = self.loader.load(
             dataset_id,
@@ -35,15 +37,32 @@ class CleaningExecutor:
 
         rows_before = len(df)
 
-        applied_operations = []
+        applied_operations: list[dict[str, Any]] = []
+        warnings: list[dict[str, Any]] = []
 
         for operation in operations:
-            df = self._apply_operation(
-                df,
-                operation,
-            )
 
-            applied_operations.append(operation)
+            try:
+                df = self._apply_operation(
+                    df,
+                    operation,
+                )
+
+                applied_operations.append(
+                    operation
+                )
+
+            except CleaningExecutionError as exc:
+
+                warnings.append(
+                    {
+                        "operation": operation,
+                        "warning": str(exc),
+                    }
+                )
+
+                # Continue with remaining operations.
+                continue
 
         destination = self._save_cleaned_dataset(
             dataset_id,
@@ -52,43 +71,55 @@ class CleaningExecutor:
 
         return {
             "dataset_id": dataset_id,
-            "status": "cleaned",
+            "status": (
+                "cleaned"
+                if not warnings
+                else "cleaned_with_warnings"
+            ),
             "source_stage": source_stage,
             "rows_before": rows_before,
             "rows_after": len(df),
-            "operations_applied": len(applied_operations),
-            "cleaned_path": str(destination),
+            "operations_requested": len(
+                operations
+            ),
+            "operations_applied": len(
+                applied_operations
+            ),
+            "warnings": warnings,
+            "cleaned_path": str(
+                destination
+            ),
         }
 
     def _get_source_stage(
-    self,
-    dataset_id: str,
-) -> str:
+        self,
+        dataset_id: str,
+    ) -> str:
 
-            if self._stage_exists(
-                dataset_id,
-                "repaired",
-            ):
-                return "repaired"
+        if self._stage_exists(
+            dataset_id,
+            "repaired",
+        ):
+            return "repaired"
 
-            return "raw"
+        return "raw"
 
     def _stage_exists(
-            self,
-            dataset_id: str,
-            stage: str,
-        ) -> bool:
+        self,
+        dataset_id: str,
+        stage: str,
+    ) -> bool:
 
-            try:
-                self.loader.get_path(
-                    dataset_id,
-                    stage=stage,
-                )
+        try:
+            self.loader.get_path(
+                dataset_id,
+                stage=stage,
+            )
 
-                return True
+            return True
 
-            except DatasetStageNotFoundError:
-                return False
+        except DatasetStageNotFoundError:
+            return False
 
     def _apply_operation(
         self,
@@ -96,7 +127,9 @@ class CleaningExecutor:
         operation: dict[str, Any],
     ) -> pd.DataFrame:
 
-        operation_type = operation.get("type")
+        operation_type = operation.get(
+            "type"
+        )
 
         if operation_type == "rename_column":
             return self._rename_column(
@@ -126,7 +159,7 @@ class CleaningExecutor:
             )
 
         raise CleaningExecutionError(
-            f"Unsupported cleaning operation: "
+            "Unsupported cleaning operation: "
             f"{operation_type}"
         )
 
@@ -146,7 +179,8 @@ class CleaningExecutor:
 
         if not new_name:
             raise CleaningExecutionError(
-                "rename_column requires 'new_name'."
+                "rename_column requires "
+                "'new_name'."
             )
 
         return df.rename(
@@ -181,10 +215,11 @@ class CleaningExecutor:
         return df
 
     def _convert_numeric(
-        self,
-        df: pd.DataFrame,
-        operation: dict[str, Any],
-    ) -> pd.DataFrame:
+    self,
+    df: pd.DataFrame,
+    operation: dict[str, Any],
+) -> pd.DataFrame:
+        
 
         column = operation.get("column")
 
@@ -198,20 +233,119 @@ class CleaningExecutor:
             "coerce",
         )
 
-        if errors not in {"raise", "coerce"}:
-            raise CleaningExecutionError(
-                "convert_numeric 'errors' must be "
-                "'raise' or 'coerce'."
+        minimum_success_rate = float(
+            operation.get(
+                "minimum_success_rate",
+                0.70,
             )
+        )
 
         df = df.copy()
 
-        df[column] = pd.to_numeric(
+        numeric = self._normalize_numeric_series(
             df[column],
             errors=errors,
         )
 
+        original_non_null = (
+            df[column]
+            .notna()
+            .sum()
+        )
+
+        converted_non_null = (
+            numeric
+            .notna()
+            .sum()
+        )
+
+        if original_non_null == 0:
+            success_rate = 1.0
+        else:
+            success_rate = (
+                converted_non_null
+                / original_non_null
+            )
+
+        if success_rate >= minimum_success_rate:
+            df[column] = numeric
+
         return df
+
+
+    def _normalize_numeric_series(
+    self,
+    series: pd.Series,
+    errors: str = "coerce",
+) -> pd.Series:
+
+            cleaned = (
+                series.astype(str)
+                .str.strip()
+            )
+
+            cleaned = cleaned.replace(
+                {
+                    "": None,
+                    "nan": None,
+                    "NaN": None,
+                    "N/A": None,
+                    "NA": None,
+                    "null": None,
+                    "None": None,
+                    "--": None,
+                    "-": None,
+                }
+            )
+
+            cleaned = cleaned.str.replace(
+                ",",
+                "",
+                regex=False,
+            )
+
+            cleaned = cleaned.str.replace(
+                "%",
+                "",
+                regex=False,
+            )
+
+            cleaned = cleaned.str.replace(
+                r"[₹$€£]",
+                "",
+                regex=True,
+            )
+
+            cleaned = cleaned.str.replace(
+                (
+                    r"(?i)"
+                    r"\b("
+                    r"hours?|hrs?|hr|"
+                    r"days?|"
+                    r"weeks?|"
+                    r"months?|"
+                    r"years?|yrs?|"
+                    r"kg|kgs?|"
+                    r"km|kms?|"
+                    r"litres?|liters?|l"
+                    r")\b"
+                ),
+                "",
+                regex=True,
+            )
+
+            cleaned = cleaned.str.replace(
+                r"\s+",
+                " ",
+                regex=True,
+            ).str.strip()
+
+            return pd.to_numeric(
+                cleaned,
+                errors=errors,
+            )
+
+            
 
     def _handle_missing_values(
         self,
@@ -227,49 +361,71 @@ class CleaningExecutor:
             column,
         )
 
+        df = df.copy()
+
+        # ----------------------------------
+        # Human review required.
+        # Do not fail the pipeline.
+        # ----------------------------------
+
+        if strategy == "review":
+            return df
+
+        # ----------------------------------
+        # Drop rows.
+        # ----------------------------------
+
         if strategy == "drop_rows":
             return df.dropna(
                 subset=[column]
             ).copy()
 
-        df = df.copy()
+        # ----------------------------------
+        # Mean.
+        # ----------------------------------
 
         if strategy == "mean":
-            value = pd.to_numeric(
-                df[column],
-                errors="coerce",
-            ).mean()
 
-            df[column] = pd.to_numeric(
+            numeric = pd.to_numeric(
                 df[column],
                 errors="coerce",
-            ).fillna(value)
+            )
+
+            df[column] = numeric.fillna(
+                numeric.mean()
+            )
 
             return df
+
+        # ----------------------------------
+        # Median.
+        # ----------------------------------
 
         if strategy == "median":
-            numeric_series = pd.to_numeric(
+
+            numeric = pd.to_numeric(
                 df[column],
                 errors="coerce",
             )
 
-            value = numeric_series.median()
-
-            df[column] = numeric_series.fillna(
-                value
+            df[column] = numeric.fillna(
+                numeric.median()
             )
 
             return df
 
+        # ----------------------------------
+        # Mode.
+        # ----------------------------------
+
         if strategy == "mode":
+
             mode = df[column].mode(
-                dropna=True
+                dropna=True,
             )
 
             if mode.empty:
-                raise CleaningExecutionError(
-                    f"Cannot calculate mode for '{column}'."
-                )
+                return df
 
             df[column] = df[column].fillna(
                 mode.iloc[0]
@@ -277,21 +433,25 @@ class CleaningExecutor:
 
             return df
 
+        # ----------------------------------
+        # Constant.
+        # ----------------------------------
+
         if strategy == "constant":
-            if "value" not in operation:
-                raise CleaningExecutionError(
-                    "constant strategy requires 'value'."
-                )
+
+            value = operation.get(
+                "value"
+            )
 
             df[column] = df[column].fillna(
-                operation["value"]
+                value
             )
 
             return df
 
         raise CleaningExecutionError(
-            f"Unsupported missing-value strategy: "
-            f"{strategy}"
+            "Unsupported missing-value "
+            f"strategy: {strategy}"
         )
 
     @staticmethod
@@ -307,7 +467,8 @@ class CleaningExecutor:
 
         if column not in df.columns:
             raise CleaningExecutionError(
-                f"Column '{column}' does not exist."
+                f"Column '{column}' "
+                "does not exist."
             )
 
     def _save_cleaned_dataset(
@@ -324,7 +485,8 @@ class CleaningExecutor:
         file_type = metadata["file_type"]
 
         directory = (
-            CLEANED_DATA_DIR / dataset_id
+            CLEANED_DATA_DIR
+            / dataset_id
         )
 
         directory.mkdir(
@@ -332,15 +494,20 @@ class CleaningExecutor:
             exist_ok=True,
         )
 
-        destination = directory / filename
+        destination = (
+            directory
+            / filename
+        )
 
         if file_type == "csv":
+
             df.to_csv(
                 destination,
                 index=False,
             )
 
         elif file_type == "xlsx":
+
             df.to_excel(
                 destination,
                 index=False,
@@ -348,7 +515,8 @@ class CleaningExecutor:
 
         else:
             raise CleaningExecutionError(
-                f"Unsupported file type: {file_type}"
+                "Unsupported file type: "
+                f"{file_type}"
             )
 
         return destination
